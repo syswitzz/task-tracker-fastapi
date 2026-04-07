@@ -29,6 +29,11 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     pass
 
+class TaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=200)
+    completed: bool | None = None
+
 class TaskResponse(TaskCreate):
     model_config = ConfigDict(from_attributes=True)
 

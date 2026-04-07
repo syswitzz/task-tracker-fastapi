@@ -25,28 +25,6 @@ async def get_all_users(
     return users
 
 
-@router.get("/{user_id}", response_model=list[TaskResponse])
-async def get_users_tasks(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    user_id: int
-):
-    ''' get all the tasks of a user '''
-    # check if user exists
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
-    result = await db.execute(
-        select(models.Task).where(models.Task.user_id == user_id)
-    )
-    tasks = result.scalars().all()
-
-    return tasks
-
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -83,6 +61,24 @@ async def create_user(
     await db.refresh(new_user)  # reloads the object from db
 
     return new_user
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user_id: int
+):
+    ''' get info about a user '''
+    # check if user exists
+    result = await db.execute(
+        select(models.User).where(models.User.id == user_id)
+    )
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    return user
 
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -140,4 +136,3 @@ async def delete_user(
     
     await db.delete(user)
     await db.commit()
-
