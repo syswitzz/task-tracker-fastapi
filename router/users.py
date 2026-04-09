@@ -139,7 +139,7 @@ async def login_for_access_token(
     ''' returns token. we have 1. form_data.password, form_data.username'''
     # OAuth2PasswordRequestForm uses "username" field, but treat is as email
 
-    result = db.execute(select(models.User).where(models.User.email == form_data.username.lower()))
+    result = await db.execute(select(models.User).where(models.User.email == form_data.username.lower()))
     user = result.scalars().first()
 
     if not user or not verify_password(form_data.password, user.password_hash):
