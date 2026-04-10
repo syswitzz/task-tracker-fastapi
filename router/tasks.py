@@ -4,6 +4,7 @@ from fastapi import APIRouter, status, HTTPException, Depends
 
 from schemas import TaskCreate, TaskResponse, TaskUpdate
 import models
+from auth import CurrentUser
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ router = APIRouter()
 async def get_all_tasks(
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    ''' get all the tasks '''
+    ''' get all the tasks. DEVELOPER USE ONLY '''
     result = await db.execute(select(models.Task))
     tasks = result.scalars().all()
 
@@ -27,23 +28,16 @@ async def get_all_tasks(
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(
     task_data: TaskCreate,
+    current_user: CurrentUser,  # if someone calls this endpoint without a valid token they get an Unathorized error even before function begins
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    ''' create a task '''
-    # check if user exists
-    result = await db.execute(
-        select(models.User).where(models.User.id == task_data.user_id)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    ''' create a task. user must be authenticated '''
 
     new_task = models.Task(
         title = task_data.title,
         description = task_data.description,
         completed = task_data.completed,
-        user_id = task_data.user_id
+        user_id = current_user.id
     )
 
     db.add(new_task)
@@ -53,13 +47,14 @@ async def create_task(
     return new_task
 
 
-
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
     task_id: int,
 ):
-    ''' get info about a task '''
+    ''' get info about a task. user must be authenticated '''
+
     result = await db.execute(
         select(models.Task).where(models.Task.id == task_id)
     )
@@ -67,6 +62,9 @@ async def get_task(
 
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to view this task")
     
     return task
 
@@ -75,9 +73,10 @@ async def get_task(
 async def update_task(
     task_id: int,
     task_data: TaskUpdate,
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    ''' update a task '''
+    ''' update a task. user must be authenticated. '''
     result = await db.execute(
         select(models.Task).where(models.Task.id == task_id)
     )
@@ -86,6 +85,9 @@ async def update_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this task")
+
     if task_data.title is not None and task_data.title != task.title:
         task.title = task_data.title
 
@@ -103,9 +105,10 @@ async def update_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     task_id: int,
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    ''' delete a task '''
+    ''' delete a task. user must be authenticated '''
     result = await db.execute(
         select(models.Task).where(models.Task.id == task_id)
     )
@@ -114,6 +117,9 @@ async def delete_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete this task")
+    
     await db.delete(task)
     await db.commit()
 
@@ -121,20 +127,12 @@ async def delete_task(
 @router.get("/users/{user_id}", response_model=list[TaskResponse])
 async def get_users_tasks(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user_id: int,
+    current_user: CurrentUser
 ):
-    ''' get all the tasks of a user '''
-
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    ''' get all the tasks of a user. user must be authenticated '''
     
     result = await db.execute(
-        select(models.Task).where(models.Task.user_id == user_id)
+        select(models.Task).where(models.Task.user_id == current_user.id)
     )
     tasks = result.scalars().all()
 

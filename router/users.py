@@ -27,7 +27,7 @@ async def get_all_users(
 
     return users
 
-
+#
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate, 
@@ -87,24 +87,6 @@ async def login_for_access_token(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(current_user: CurrentUser):
     return current_user
-
-
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    user_id: int
-):
-    ''' get info about a user. DEVELOPER USE ONLY '''
-    # check if user exists
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
-    return user
 
 
 @router.put("/{user_id}", response_model=UserResponse)
