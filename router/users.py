@@ -21,7 +21,7 @@ router = APIRouter()
 async def get_all_users(
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    ''' get all the users '''
+    ''' get all the users. DEVELOPER USE ONLY '''
     result = await db.execute(select(models.User))
     users = result.scalars().all()
 
@@ -56,12 +56,45 @@ async def create_user(
     return new_user
 
 
+@router.post("/token", response_model=Token)
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    ''' returns token. we have 1. form_data.password, form_data.username'''
+    # OAuth2PasswordRequestForm uses "username" field, but treat is as email
+
+    result = await db.execute(select(models.User).where(models.User.email == form_data.username.lower()))
+    user = result.scalars().first()
+
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # create the temporary access token if credentials are correct
+    access_token = create_access_token(
+        data = {"sub": str(user.id)},
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+    return Token(token_type="bearer", access_token=access_token)
+
+
+# Always place fixed paths (like /users/me) above dynamic paths (like /users/{user_id}) in your code.
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(current_user: CurrentUser):
+    return current_user
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     user_id: int
 ):
-    ''' get info about a user '''
+    ''' get info about a user. DEVELOPER USE ONLY '''
     # check if user exists
     result = await db.execute(
         select(models.User).where(models.User.id == user_id)
@@ -78,9 +111,14 @@ async def get_user(
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
     ''' update a user '''
+    
+    if current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this user")
+
     result = await db.execute(
         select(models.User).where(models.User.id == user_id)
     )
@@ -116,9 +154,14 @@ async def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    ''' delete a user '''
+    ''' delete a user. cascade deletes their tasks as well. '''
+
+    if current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete this user")
+
     result = await db.execute(
         select(models.User).where(models.User.id == user_id),
     )
@@ -131,39 +174,3 @@ async def delete_user(
     await db.commit()
 
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db)]
-):
-    ''' returns token. we have 1. form_data.password, form_data.username'''
-    # OAuth2PasswordRequestForm uses "username" field, but treat is as email
-
-    result = await db.execute(select(models.User).where(models.User.email == form_data.username.lower()))
-    user = result.scalars().first()
-
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # create the temporary access token if credentials are correct
-    access_token = create_access_token(
-        data = {"sub": str(user.id)},
-        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
-    )
-
-    return Token(token_type="bearer", access_token=access_token)
-
-
-@router.get("/me", response_model=UserResponse)
-async def get_current_user(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: CurrentUser,
-):
-    result = await db.execute(select(models.User).where(models.User.id == current_user.id))
-    user = result.scalars().first()
-
-    return user
