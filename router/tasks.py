@@ -139,3 +139,51 @@ async def get_users_tasks(
     return tasks
 
 
+@router.post("/{task_id}/complete", status_code=status.HTTP_202_ACCEPTED)
+async def mark_task_completed(
+    task_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    ''' mark a task as completed. user must be authenticated '''
+    result = await db.execute(
+        select(models.Task).where(models.Task.id == task_id)
+    )
+    task = result.scalars().first()
+
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this task")
+    
+    task.completed = True
+    await db.commit()
+    await db.refresh(task)
+
+    return task
+
+
+@router.post("/{task_id}/incomplete", status_code=status.HTTP_202_ACCEPTED)
+async def mark_task_incomplete(
+    task_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    ''' mark a task as incomplete. user must be authenticated '''
+    result = await db.execute(
+        select(models.Task).where(models.Task.id == task_id)
+    )
+    task = result.scalars().first()
+
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    if task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this task")
+
+    task.completed = False
+    await db.commit()
+    await db.refresh(task)
+
+    return task

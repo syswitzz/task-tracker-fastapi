@@ -6,14 +6,6 @@
 
 ### TODO / ROADMAP
 
-#### feat
-
-* add authentication (JWT)
-
-  * GET /me
-  * POST /auth/register
-  * POST /auth/login
-
 * add pagination and sorting
 
 * add priority (low, medium, high)
